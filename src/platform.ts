@@ -1,29 +1,27 @@
-import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig, Service } from 'homebridge';
+import type {
+  API,
+  Characteristic,
+  DynamicPlatformPlugin,
+  Logging,
+  PlatformAccessory,
+  PlatformConfig,
+  Service,
+} from 'homebridge';
 
-import { ExamplePlatformAccessory } from './platformAccessory.js';
-import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
+import { TadoLocalClient, TadoZoneState } from './client.js';
+import { TadoZoneAccessory } from './platformAccessory.js';
 
-// This is only required when using Custom Services and Characteristics not support by HomeKit
-import { EveHomeKitTypes } from 'homebridge-lib/EveHomeKitTypes';
+export const PLATFORM_NAME = 'TadoLocal';
+export const PLUGIN_NAME = 'homebridge-tado-local';
 
-/**
- * HomebridgePlatform
- * This class is the main constructor for your plugin, this is where you should
- * parse the user config and discover/register accessories with Homebridge.
- */
-export class ExampleHomebridgePlatform implements DynamicPlatformPlugin {
+export class TadoLocalPlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
   public readonly Characteristic: typeof Characteristic;
+  public readonly accessories: PlatformAccessory[] = [];
 
-  // this is used to track restored cached accessories
-  public readonly accessories: Map<string, PlatformAccessory> = new Map();
-  public readonly discoveredCacheUUIDs: string[] = [];
-
-  // This is only required when using Custom Services and Characteristics not support by HomeKit
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public readonly CustomServices: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public readonly CustomCharacteristics: any;
+  private readonly client: TadoLocalClient;
+  private readonly zoneAccessories = new Map<string, TadoZoneAccessory>();
+  private pollTimer?: NodeJS.Timeout;
 
   constructor(
     public readonly log: Logging,
@@ -33,118 +31,100 @@ export class ExampleHomebridgePlatform implements DynamicPlatformPlugin {
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
 
-    // This is only required when using Custom Services and Characteristics not support by HomeKit
-    this.CustomServices = new EveHomeKitTypes(this.api).Services;
-    this.CustomCharacteristics = new EveHomeKitTypes(this.api).Characteristics;
+    if (!config.host || !config.bearerToken) {
+      this.log.error('TadoLocal: "host" and "bearerToken" are required in config — platform disabled.');
+      this.client = null as unknown as TadoLocalClient; // never used past this point
+      return;
+    }
 
-    this.log.debug('Finished initializing platform:', this.config.name);
+    this.client = new TadoLocalClient(
+      config.host as string,
+      (config.port as number) ?? 4407,
+      config.bearerToken as string,
+      log,
+    );
 
-    // When this event is fired it means Homebridge has restored all cached accessories from disk.
-    // Dynamic Platform plugins should only register new accessories after this event was fired,
-    // in order to ensure they weren't added to homebridge already. This event can also be used
-    // to start discovery of new accessories.
     this.api.on('didFinishLaunching', () => {
-      log.debug('Executed didFinishLaunching callback');
-      // run the method to discover / register your devices as accessories
       this.discoverDevices();
+    });
+
+    this.api.on('shutdown', () => {
+      this.client.disconnectEvents();
+      if (this.pollTimer) {
+        clearInterval(this.pollTimer);
+      }
     });
   }
 
-  /**
-   * This function is invoked when homebridge restores cached accessories from disk at startup.
-   * It should be used to set up event handlers for characteristics and update respective values.
-   */
-  configureAccessory(accessory: PlatformAccessory) {
-    this.log.info('Loading accessory from cache:', accessory.displayName);
-
-    // add the restored accessory to the accessories cache, so we can track if it has already been registered
-    this.accessories.set(accessory.UUID, accessory);
+  /** Homebridge calls this for every cached accessory on startup — required by the platform API. */
+  configureAccessory(accessory: PlatformAccessory): void {
+    this.accessories.push(accessory);
   }
 
-  /**
-   * This is an example method showing how to register discovered accessories.
-   * Accessories must only be registered once, previously created accessories
-   * must not be registered again to prevent "duplicate UUID" errors.
-   */
-  discoverDevices() {
-    // EXAMPLE ONLY
-    // A real plugin you would discover accessories from the local network, cloud services
-    // or a user-defined array in the platform config.
-    const exampleDevices = [
-      {
-        exampleUniqueId: 'ABCD',
-        exampleDisplayName: 'Bedroom',
-      },
-      {
-        exampleUniqueId: 'EFGH',
-        exampleDisplayName: 'Kitchen',
-      },
-      {
-        // This is an example of a device which uses a Custom Service
-        exampleUniqueId: 'IJKL',
-        exampleDisplayName: 'Backyard',
-        CustomService: 'AirPressureSensor',
-      },
-    ];
-
-    // loop over the discovered devices and register each one if it has not already been registered
-    for (const device of exampleDevices) {
-      // generate a unique id for the accessory this should be generated from
-      // something globally unique, but constant, for example, the device serial
-      // number or MAC address
-      const uuid = this.api.hap.uuid.generate(device.exampleUniqueId);
-
-      // see if an accessory with the same uuid has already been registered and restored from
-      // the cached devices we stored in the `configureAccessory` method above
-      const existingAccessory = this.accessories.get(uuid);
-
-      if (existingAccessory) {
-        // the accessory already exists
-        this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName);
-
-        // if you need to update the accessory.context then you should run `api.updatePlatformAccessories`. e.g.:
-        // existingAccessory.context.device = device;
-        // this.api.updatePlatformAccessories([existingAccessory]);
-
-        // create the accessory handler for the restored accessory
-        // this is imported from `platformAccessory.ts`
-        new ExamplePlatformAccessory(this, existingAccessory);
-
-        // it is possible to remove platform accessories at any time using `api.unregisterPlatformAccessories`, e.g.:
-        // remove platform accessories when no longer present
-        // this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [existingAccessory]);
-        // this.log.info('Removing existing accessory from cache:', existingAccessory.displayName);
-      } else {
-        // the accessory does not yet exist, so we need to create it
-        this.log.info('Adding new accessory:', device.exampleDisplayName);
-
-        // create a new accessory
-        const accessory = new this.api.platformAccessory(device.exampleDisplayName, uuid);
-
-        // store a copy of the device object in the `accessory.context`
-        // the `context` property can be used to store any data about the accessory you may need
-        accessory.context.device = device;
-
-        // create the accessory handler for the newly create accessory
-        // this is imported from `platformAccessory.ts`
-        new ExamplePlatformAccessory(this, accessory);
-
-        // link the accessory to your platform
-        this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-      }
-
-      // push into discoveredCacheUUIDs
-      this.discoveredCacheUUIDs.push(uuid);
+  private async discoverDevices(): Promise<void> {
+    if (!this.client) {
+      return;
     }
 
-    // you can also deal with accessories from the cache which are no longer present by removing them from Homebridge
-    // for example, if your plugin logs into a cloud account to retrieve a device list, and a user has previously removed a device
-    // from this cloud account, then this device will no longer be present in the device list but will still be in the Homebridge cache
-    for (const [uuid, accessory] of this.accessories) {
-      if (!this.discoveredCacheUUIDs.includes(uuid)) {
-        this.log.info('Removing existing accessory from cache:', accessory.displayName);
-        this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+    let zones: TadoZoneState[];
+    try {
+      zones = await this.client.getZones();
+    } catch (err) {
+      this.log.error('TadoLocal: initial GET /zones failed, will retry on next poll', err);
+      zones = [];
+    }
+
+    for (const zone of zones) {
+      this.upsertAccessory(zone);
+    }
+
+    // Remove cached accessories for zones that no longer exist upstream.
+    const currentUuids = new Set(zones.map((z) => this.uuidFor(z.id)));
+    for (const cached of this.accessories) {
+      if (!currentUuids.has(cached.UUID)) {
+        this.log.info(`TadoLocal: removing stale accessory ${cached.displayName}`);
+        this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [cached]);
       }
     }
+
+    this.client.connectEvents();
+    this.client.on('update', (zone: TadoZoneState) => {
+      this.zoneAccessories.get(zone.id)?.applyUpdate(zone);
+    });
+
+    const intervalSeconds = (this.config.pollIntervalSeconds as number) ?? 60;
+    this.pollTimer = setInterval(() => this.pollFallback(), intervalSeconds * 1000);
+  }
+
+  private async pollFallback(): Promise<void> {
+    try {
+      const zones = await this.client.getZones();
+      for (const zone of zones) {
+        this.zoneAccessories.get(zone.id)?.applyUpdate(zone);
+      }
+    } catch (err) {
+      this.log.warn('TadoLocal: fallback poll failed', err);
+    }
+  }
+
+  private uuidFor(zoneId: string): string {
+    return this.api.hap.uuid.generate(`tado-local-zone-${zoneId}`);
+  }
+
+  private upsertAccessory(zone: TadoZoneState): void {
+    const uuid = this.uuidFor(zone.id);
+    const existing = this.accessories.find((a) => a.UUID === uuid);
+
+    if (existing) {
+      existing.displayName = zone.name;
+      this.zoneAccessories.set(zone.id, new TadoZoneAccessory(this, existing, this.client, zone));
+      return;
+    }
+
+    this.log.info(`TadoLocal: adding zone "${zone.name}"`);
+    const accessory = new this.api.platformAccessory(zone.name, uuid);
+    this.zoneAccessories.set(zone.id, new TadoZoneAccessory(this, accessory, this.client, zone));
+    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+    this.accessories.push(accessory);
   }
 }
