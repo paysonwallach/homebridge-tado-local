@@ -1,8 +1,11 @@
-import type { PlatformAccessory, Service } from 'homebridge';
+import type { PlatformAccessory, Service } from "homebridge";
 
-import type { TadoLocalPlatform } from './platform.js';
-import type { TadoLocalClient, TadoZoneState } from './client.js';
-import { currentHeatingCoolingState, targetHeatingCoolingState } from './zoneMapping.js';
+import type { TadoLocalPlatform } from "./platform.js";
+import type { TadoLocalClient, TadoZoneState } from "./client.js";
+import {
+  currentHeatingCoolingState,
+  targetHeatingCoolingState,
+} from "./zoneMapping.js";
 
 export class TadoZoneAccessory {
   private readonly service: Service;
@@ -18,15 +21,21 @@ export class TadoZoneAccessory {
 
     this.accessory
       .getService(this.platform.Service.AccessoryInformation)!
-      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'tado°')
-      .setCharacteristic(this.platform.Characteristic.Model, 'TadoLocal zone')
-      .setCharacteristic(this.platform.Characteristic.SerialNumber, `zone-${initialZone.id}`);
+      .setCharacteristic(this.platform.Characteristic.Manufacturer, "tado°")
+      .setCharacteristic(this.platform.Characteristic.Model, "TadoLocal zone")
+      .setCharacteristic(
+        this.platform.Characteristic.SerialNumber,
+        `zone-${initialZone.id}`,
+      );
 
     this.service =
       this.accessory.getService(this.platform.Service.Thermostat) ||
       this.accessory.addService(this.platform.Service.Thermostat);
 
-    this.service.setCharacteristic(this.platform.Characteristic.Name, initialZone.name);
+    this.service.setCharacteristic(
+      this.platform.Characteristic.Name,
+      initialZone.name,
+    );
 
     this.service
       .getCharacteristic(this.platform.Characteristic.CurrentTemperature)
@@ -58,7 +67,9 @@ export class TadoZoneAccessory {
       });
 
     this.service
-      .getCharacteristic(this.platform.Characteristic.CurrentHeatingCoolingState)
+      .getCharacteristic(
+        this.platform.Characteristic.CurrentHeatingCoolingState,
+      )
       .onGet(() => this.currentHeatingCoolingState());
 
     this.service
@@ -71,7 +82,8 @@ export class TadoZoneAccessory {
       })
       .onGet(() => this.targetHeatingCoolingState())
       .onSet(async (value) => {
-        const wantsOff = value === this.platform.Characteristic.TargetHeatingCoolingState.OFF;
+        const wantsOff =
+          value === this.platform.Characteristic.TargetHeatingCoolingState.OFF;
         try {
           if (wantsOff) {
             await this.client.disableZone(this.zone.id);
@@ -96,7 +108,9 @@ export class TadoZoneAccessory {
 
     this.service
       .getCharacteristic(this.platform.Characteristic.TemperatureDisplayUnits)
-      .onGet(() => this.platform.Characteristic.TemperatureDisplayUnits.CELSIUS);
+      .onGet(
+        () => this.platform.Characteristic.TemperatureDisplayUnits.CELSIUS,
+      );
   }
 
   /** Called by the platform on every SSE update or fallback poll for this zone. */

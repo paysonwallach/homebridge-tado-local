@@ -1,7 +1,7 @@
-import type { API } from 'homebridge';
+import type { API } from "homebridge";
 
-import { TadoLocalPlatform } from './platform.js';
-import { PLATFORM_NAME } from './settings.js';
+import { TadoLocalPlatform } from "./platform.js";
+import { PLATFORM_NAME } from "./settings.js";
 
 /**
  * This method registers the platform with Homebridge

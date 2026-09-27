@@ -6,13 +6,13 @@ import type {
   PlatformAccessory,
   PlatformConfig,
   Service,
-} from 'homebridge';
+} from "homebridge";
 
-import { TadoLocalClient, TadoZoneState } from './client.js';
-import { TadoZoneAccessory } from './platformAccessory.js';
+import { TadoLocalClient, TadoZoneState } from "./client.js";
+import { TadoZoneAccessory } from "./platformAccessory.js";
 
-export const PLATFORM_NAME = 'TadoLocal';
-export const PLUGIN_NAME = 'homebridge-tado-local';
+export const PLATFORM_NAME = "TadoLocal";
+export const PLUGIN_NAME = "homebridge-tado-local";
 
 export class TadoLocalPlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
@@ -32,7 +32,9 @@ export class TadoLocalPlatform implements DynamicPlatformPlugin {
     this.Characteristic = api.hap.Characteristic;
 
     if (!config.host || !config.bearerToken) {
-      this.log.error('TadoLocal: "host" and "bearerToken" are required in config — platform disabled.');
+      this.log.error(
+        'TadoLocal: "host" and "bearerToken" are required in config — platform disabled.',
+      );
       this.client = null as unknown as TadoLocalClient; // never used past this point
       return;
     }
@@ -44,11 +46,11 @@ export class TadoLocalPlatform implements DynamicPlatformPlugin {
       log,
     );
 
-    this.api.on('didFinishLaunching', () => {
+    this.api.on("didFinishLaunching", () => {
       this.discoverDevices();
     });
 
-    this.api.on('shutdown', () => {
+    this.api.on("shutdown", () => {
       this.client.disconnectEvents();
       if (this.pollTimer) {
         clearInterval(this.pollTimer);
@@ -70,7 +72,10 @@ export class TadoLocalPlatform implements DynamicPlatformPlugin {
     try {
       zones = await this.client.getZones();
     } catch (err) {
-      this.log.error('TadoLocal: initial GET /zones failed, will retry on next poll', err);
+      this.log.error(
+        "TadoLocal: initial GET /zones failed, will retry on next poll",
+        err,
+      );
       zones = [];
     }
 
@@ -82,18 +87,25 @@ export class TadoLocalPlatform implements DynamicPlatformPlugin {
     const currentUuids = new Set(zones.map((z) => this.uuidFor(z.id)));
     for (const cached of this.accessories) {
       if (!currentUuids.has(cached.UUID)) {
-        this.log.info(`TadoLocal: removing stale accessory ${cached.displayName}`);
-        this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [cached]);
+        this.log.info(
+          `TadoLocal: removing stale accessory ${cached.displayName}`,
+        );
+        this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [
+          cached,
+        ]);
       }
     }
 
     this.client.connectEvents();
-    this.client.on('update', (zone: TadoZoneState) => {
+    this.client.on("update", (zone: TadoZoneState) => {
       this.zoneAccessories.get(zone.id)?.applyUpdate(zone);
     });
 
     const intervalSeconds = (this.config.pollIntervalSeconds as number) ?? 60;
-    this.pollTimer = setInterval(() => this.pollFallback(), intervalSeconds * 1000);
+    this.pollTimer = setInterval(
+      () => this.pollFallback(),
+      intervalSeconds * 1000,
+    );
   }
 
   private async pollFallback(): Promise<void> {
@@ -103,7 +115,7 @@ export class TadoLocalPlatform implements DynamicPlatformPlugin {
         this.zoneAccessories.get(zone.id)?.applyUpdate(zone);
       }
     } catch (err) {
-      this.log.warn('TadoLocal: fallback poll failed', err);
+      this.log.warn("TadoLocal: fallback poll failed", err);
     }
   }
 
@@ -117,14 +129,22 @@ export class TadoLocalPlatform implements DynamicPlatformPlugin {
 
     if (existing) {
       existing.displayName = zone.name;
-      this.zoneAccessories.set(zone.id, new TadoZoneAccessory(this, existing, this.client, zone));
+      this.zoneAccessories.set(
+        zone.id,
+        new TadoZoneAccessory(this, existing, this.client, zone),
+      );
       return;
     }
 
     this.log.info(`TadoLocal: adding zone "${zone.name}"`);
     const accessory = new this.api.platformAccessory(zone.name, uuid);
-    this.zoneAccessories.set(zone.id, new TadoZoneAccessory(this, accessory, this.client, zone));
-    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+    this.zoneAccessories.set(
+      zone.id,
+      new TadoZoneAccessory(this, accessory, this.client, zone),
+    );
+    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [
+      accessory,
+    ]);
     this.accessories.push(accessory);
   }
 }

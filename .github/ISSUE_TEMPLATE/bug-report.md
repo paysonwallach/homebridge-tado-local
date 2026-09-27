@@ -1,10 +1,9 @@
 ---
 name: Bug Report
 about: Create a report to help us improve
-title: ''
+title: ""
 labels: bug
-assignees: ''
-
+assignees: ""
 ---
 
 <!-- You must use the issue template below when submitting a bug -->
@@ -35,10 +34,10 @@ Show your Homebridge config.json here, remove any sensitive information.
 
 **Environment:**
 
-* **Plugin Version**:
-* **Homebridge Version**: <!-- homebridge -V -->
-* **Node.js Version**: <!-- node -v -->
-* **NPM Version**: <!-- npm -v -->
-* **Operating System**: <!-- Raspbian / Ubuntu / Debian / Windows / macOS / Docker / hb-service -->
+- **Plugin Version**:
+- **Homebridge Version**: <!-- homebridge -V -->
+- **Node.js Version**: <!-- node -v -->
+- **NPM Version**: <!-- npm -v -->
+- **Operating System**: <!-- Raspbian / Ubuntu / Debian / Windows / macOS / Docker / hb-service -->
 
 <!-- Click the "Preview" tab before you submit to ensure the formatting is correct. -->
