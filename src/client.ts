@@ -2,6 +2,29 @@ import { EventEmitter } from "events";
 import type { Logging } from "homebridge";
 import EventSource from "eventsource";
 
+interface RawZoneState {
+  mode?: unknown;
+  cur_heating?: unknown;
+  cur_temp_c?: unknown;
+  current_temperature?: unknown;
+  hum_perc?: unknown;
+  target_temp_c?: unknown;
+  target_temperature?: unknown;
+}
+
+interface RawZone {
+  zone_id?: unknown;
+  id?: unknown;
+  name?: unknown;
+  state?: RawZoneState;
+  mode?: unknown;
+  heating?: unknown;
+}
+
+interface HasZones {
+  zones: RawZone[];
+}
+
 export interface TadoZoneState {
   id: string;
   name: string;
@@ -12,6 +35,14 @@ export interface TadoZoneState {
   heatingCoolingState: 0 | 1 | 2 | null;
   /** state.mode — zone enabled at all, independent of what it's currently doing. */
   enabled: boolean | null;
+}
+
+function asNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }
 
 export class TadoLocalClient extends EventEmitter {
@@ -81,11 +112,14 @@ export class TadoLocalClient extends EventEmitter {
     });
     this.eventSource.onmessage = (ev: MessageEvent) => {
       try {
-        const payload = JSON.parse(ev.data);
+        const payload: unknown = JSON.parse(ev.data);
         // Unconfirmed shape — same caveat as normalizeZones(). Assumes the
         // event either *is* a zone object or wraps one under `.zone`.
-        const raw = payload.zone ?? payload;
-        for (const zone of this.normalizeZones({ zones: [raw] })) {
+        const raw =
+          typeof payload === "object" && payload !== null && "zone" in payload
+            ? (payload as { zone: unknown }).zone
+            : payload;
+        for (const zone of this.normalizeZones({ zones: [raw as RawZone] })) {
           this.emit("update", zone);
         }
       } catch (err) {
@@ -109,10 +143,10 @@ export class TadoLocalClient extends EventEmitter {
   }
 
   private normalizeZones(body: unknown): TadoZoneState[] {
-    const rawZones: any[] =
-      (body as any)?.zones ?? (Array.isArray(body) ? body : []);
+    const rawZones: RawZone[] =
+      (body as HasZones)?.zones ?? (Array.isArray(body) ? body : []);
 
-    return rawZones.map((z: any) => {
+    return rawZones.map((z: RawZone) => {
       const id = String(z.zone_id ?? z.id);
       const state = z.state ?? {};
       const mode = state.mode ?? z.mode;
@@ -120,12 +154,13 @@ export class TadoLocalClient extends EventEmitter {
 
       return {
         id,
-        name: z.name ?? `Zone ${id}`,
+        name: asString(z.name) ?? `Zone ${id}`,
         currentTemperatureC:
-          state.cur_temp_c ?? state.current_temperature ?? null,
-        currentHumidityPercent: state.hum_perc ?? null,
+          asNumber(state.cur_temp_c) ?? asNumber(state.current_temperature),
+        currentHumidityPercent: asNumber(state.hum_perc),
         targetTemperatureC:
-          state.target_temp_c ?? state.target_temperature ?? null,
+          asNumber(state.target_temp_c) ??
+          asNumber(state.target_temperature),
         heatingCoolingState:
           cur_heating === 0 || cur_heating === 1 || cur_heating === 2
             ? cur_heating
