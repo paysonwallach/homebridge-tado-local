@@ -11,11 +11,14 @@
     "node": "^22.10.0 || ^24.0.0",
     "homebridge": "^1.8.0 || ^2.0.0"
   },
+  "files": [
+    "dist"
+  ],
   "keywords": [
     "homebridge-plugin"
   ],
   "scripts": {
-    "build": "rimraf ./dist && tsc",
+    "build": "rimraf ./dist && tsc -p tsconfig.build.json",
     "watch": "npm run build && npm link && nodemon",
     "test": "vitest run",
     "test:watch": "vitest",
